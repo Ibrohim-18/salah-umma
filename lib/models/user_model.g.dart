@@ -30,14 +30,16 @@ class UserModelAdapter extends TypeAdapter<UserModel> {
       calculationMethod: fields[10] as int,
       completedPrayersDaily: (fields[11] as Map?)?.map((dynamic k, dynamic v) =>
           MapEntry(k as String, (v as List).cast<String>())),
-      uiScale: fields[12] as double? ?? 1.0,
+      uiScale: fields[12] == null ? 1.0 : fields[12] as double,
+      reminders: (fields[13] as Map?)?.cast<String, bool>(),
+      reminderMinutesBefore: fields[14] == null ? 15 : fields[14] as int,
     );
   }
 
   @override
   void write(BinaryWriter writer, UserModel obj) {
     writer
-      ..writeByte(13)
+      ..writeByte(15)
       ..writeByte(0)
       ..write(obj.userId)
       ..writeByte(1)
@@ -63,7 +65,11 @@ class UserModelAdapter extends TypeAdapter<UserModel> {
       ..writeByte(11)
       ..write(obj.completedPrayersDaily)
       ..writeByte(12)
-      ..write(obj.uiScale);
+      ..write(obj.uiScale)
+      ..writeByte(13)
+      ..write(obj.reminders)
+      ..writeByte(14)
+      ..write(obj.reminderMinutesBefore);
   }
 
   @override

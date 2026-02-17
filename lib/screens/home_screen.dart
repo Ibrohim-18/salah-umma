@@ -1,8 +1,11 @@
-import 'dart:ui';
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:hijri_calendar/hijri_calendar.dart';
 import '../providers/user_provider.dart';
 import '../widgets/glass_container.dart';
+import '../constants/app_theme.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -11,12 +14,34 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
+  late AnimationController _ringController;
+
+  @override
+  void initState() {
+    super.initState();
+    _ringController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _ringController.dispose();
+    super.dispose();
+  }
+
   String _formatDate(DateTime date) {
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
                     'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
     return '${days[date.weekday - 1]}, ${months[date.month - 1]} ${date.day}';
+  }
+
+  String _formatHijriDate(DateTime date) {
+    final hijri = HijriCalendarConfig.fromGregorian(date);
+    return '${hijri.hDay} ${hijri.getLongMonthName()} ${hijri.hYear} AH';
   }
 
   @override
@@ -25,77 +50,355 @@ class _HomeScreenState extends State<HomeScreen> {
     final scale = userProvider.user?.uiScale ?? 1.0;
     final screenWidth = MediaQuery.of(context).size.width;
     final isSmallScreen = screenWidth < 400;
-    final horizontalPadding = (isSmallScreen ? 12.0 : 16.0) * scale;
+    final horizontalPadding = (isSmallScreen ? 14.0 : 18.0) * scale;
 
     return SingleChildScrollView(
-      padding: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: 6 * scale),
+      physics: const BouncingScrollPhysics(),
+      padding: EdgeInsets.fromLTRB(horizontalPadding, 64 * scale, horizontalPadding, 110 * scale),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _buildHeader(context, scale),
-          SizedBox(height: 12 * scale),
-          _buildNextPrayerCard(context, scale),
-          SizedBox(height: 14 * scale),
+          _buildGreeting(context, scale),
+          SizedBox(height: 20 * scale),
+          _buildHeroCountdown(context, scale),
+          SizedBox(height: 20 * scale),
           _buildDateNavigation(context, scale),
-          SizedBox(height: 10 * scale),
-          _buildPrayerTimesList(context, scale),
           SizedBox(height: 14 * scale),
+          _buildPrayerTimesList(context, scale),
+          SizedBox(height: 18 * scale),
           _buildQadaCard(context, scale),
-          SizedBox(height: 12 * scale),
+          SizedBox(height: 16 * scale),
         ],
       ),
     );
   }
 
-  Widget _buildHeader(BuildContext context, double scale) {
+  // ─── Greeting Section ───
+  Widget _buildGreeting(BuildContext context, double scale) {
     final userProvider = context.watch<UserProvider>();
     final user = userProvider.user;
+    final city = user?.city;
     final screenWidth = MediaQuery.of(context).size.width;
     final isSmallScreen = screenWidth < 400;
     final now = DateTime.now();
 
-    return Padding(
-      padding: EdgeInsets.symmetric(horizontal: 2 * scale),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          AppTheme.getGreeting(),
+          style: TextStyle(
+            fontSize: (isSmallScreen ? 28 : 34) * scale,
+            fontWeight: FontWeight.w700,
+            color: Colors.white,
+            letterSpacing: 1,
+            height: 1.2,
+          ),
+        ),
+        SizedBox(height: 4 * scale),
+        Row(
+          children: [
+            Text(
+              AppTheme.getGreetingSubtitle(),
+              style: TextStyle(
+                fontSize: (isSmallScreen ? 13 : 15) * scale,
+                fontWeight: FontWeight.w400,
+                color: Colors.white.withAlpha(120),
+              ),
+            ),
+            if (city != null && city.isNotEmpty) ...[
+              SizedBox(width: 8 * scale),
+              Container(
+                width: 3,
+                height: 3,
+                decoration: BoxDecoration(
+                  color: Colors.white.withAlpha(60),
+                  shape: BoxShape.circle,
+                ),
+              ),
+              SizedBox(width: 8 * scale),
+              Icon(Icons.location_on_outlined,
+                  color: Colors.white.withAlpha(100), size: 14 * scale),
+              SizedBox(width: 2 * scale),
+              Text(
+                city,
+                style: TextStyle(
+                  fontSize: (isSmallScreen ? 12 : 13) * scale,
+                  fontWeight: FontWeight.w400,
+                  color: Colors.white.withAlpha(100),
+                ),
+              ),
+            ],
+          ],
+        ),
+        SizedBox(height: 4 * scale),
+        Row(
+          children: [
+            Text(
+              _formatDate(now),
+              style: TextStyle(
+                fontSize: (isSmallScreen ? 11 : 12) * scale,
+                fontWeight: FontWeight.w500,
+                color: Colors.white.withAlpha(80),
+              ),
+            ),
+            SizedBox(width: 8 * scale),
+            Text(
+              '•',
+              style: TextStyle(
+                fontSize: 10 * scale,
+                color: Colors.white.withAlpha(40),
+              ),
+            ),
+            SizedBox(width: 8 * scale),
+            Text(
+              _formatHijriDate(now),
+              style: TextStyle(
+                fontSize: (isSmallScreen ? 11 : 12) * scale,
+                fontWeight: FontWeight.w500,
+                color: AppTheme.accentGold.withAlpha(120),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  // ─── Circular Countdown Hero ───
+  Widget _buildHeroCountdown(BuildContext context, double scale) {
+    final userProvider = context.watch<UserProvider>();
+    final nextPrayer = userProvider.nextPrayer;
+    final user = userProvider.user;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isSmallScreen = screenWidth < 400;
+
+    if (user?.latitude == null || user?.longitude == null) {
+      return GlassContainer(
+        variant: GlassVariant.elevated,
+        padding: EdgeInsets.all(28 * scale),
+        child: Center(
+          child: Column(
+            children: [
+              Icon(Icons.location_off_rounded, size: 40 * scale,
+                  color: Colors.white.withAlpha(100)),
+              SizedBox(height: 14 * scale),
+              Text(
+                'Set location in Settings',
+                style: TextStyle(color: Colors.white.withAlpha(150),
+                    fontSize: 14 * scale, fontWeight: FontWeight.w500),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (nextPrayer == null) {
+      return GlassContainer(
+        variant: GlassVariant.elevated,
+        padding: EdgeInsets.all(40 * scale),
+        child: Center(
+          child: Column(
+            children: [
+              SizedBox(
+                width: 40 * scale,
+                height: 40 * scale,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2 * scale,
+                  color: AppTheme.primaryTeal.withAlpha(100),
+                ),
+              ),
+              SizedBox(height: 16 * scale),
+              Text(
+                'CALCULATING...',
+                style: TextStyle(
+                  fontSize: 10 * scale,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.primaryTeal.withAlpha(150),
+                  letterSpacing: 2,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final timeUntil = nextPrayer.timeUntilAdhan;
+    final totalSeconds = timeUntil.inSeconds;
+    
+    int maxSeconds = 6 * 3600; 
+    if (nextPrayer.previousAdhanTime != null) {
+      maxSeconds = nextPrayer.adhanTime.difference(nextPrayer.previousAdhanTime!).inSeconds;
+    }
+    if (maxSeconds <= 0) maxSeconds = 6 * 3600;
+    
+    final progress = 1.0 - (totalSeconds.clamp(0, maxSeconds) / maxSeconds).clamp(0.0, 1.0);
+    final hours = timeUntil.inHours;
+    final minutes = timeUntil.inMinutes % 60;
+    final seconds = timeUntil.inSeconds % 60;
+    final prayerColor = AppTheme.getPrayerColor(nextPrayer.name);
+    final prayerAccent = AppTheme.getPrayerAccent(nextPrayer.name);
+    final ringSize = (isSmallScreen ? 220.0 : 260.0) * scale;
+
+    return Center(
+      child: Stack(
+        clipBehavior: Clip.none,
+        alignment: Alignment.center,
         children: [
-          Text(
-            _formatDate(now),
-            style: TextStyle(
-              fontSize: (isSmallScreen ? 14 : 16) * scale,
-              fontWeight: FontWeight.w600,
-              color: Colors.white.withAlpha(220),
-              letterSpacing: 0.3,
+          Container(
+            width: ringSize * 0.84,
+            height: ringSize * 0.84,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: RadialGradient(
+                colors: [
+                  prayerColor.withAlpha(40),
+                  prayerColor.withAlpha(20),
+                  Colors.transparent,
+                ],
+                stops: const [0.12, 0.5, 1.0],
+              ),
             ),
           ),
-          if (user?.city != null)
-            Container(
-              padding: EdgeInsets.symmetric(
-                horizontal: (isSmallScreen ? 10 : 12) * scale,
-                vertical: (isSmallScreen ? 5 : 6) * scale,
-              ),
-              decoration: BoxDecoration(
-                color: Colors.white.withAlpha(15),
-                borderRadius: BorderRadius.circular(16 * scale),
-                border: Border.all(color: Colors.white.withAlpha(25)),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.location_on_outlined,
-                       color: Colors.white.withAlpha(180), size: (isSmallScreen ? 12 : 14) * scale),
-                  SizedBox(width: 4 * scale),
-                  Text(
-                    user!.city!,
-                    style: TextStyle(
-                      fontSize: (isSmallScreen ? 10 : 11) * scale,
-                      fontWeight: FontWeight.w500,
-                      color: Colors.white.withAlpha(200),
+          SizedBox(
+            width: ringSize,
+            height: ringSize,
+            child: AnimatedBuilder(
+              animation: _ringController,
+              builder: (context, child) {
+                return RepaintBoundary(
+                  child: CustomPaint(
+                    painter: _CountdownRingPainter(
+                      progress: progress,
+                      prayerColor: prayerColor,
+                      prayerAccent: prayerAccent,
+                      pulseValue: _ringController.value,
+                    ),
+                    child: Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'UPCOMING',
+                            style: TextStyle(
+                              fontSize: 10 * scale,
+                              fontWeight: FontWeight.w800,
+                              color: prayerAccent.withAlpha(200),
+                              letterSpacing: 3,
+                            ),
+                          ),
+                          SizedBox(height: 12 * scale),
+                          Text(
+                            nextPrayer.name,
+                            style: TextStyle(
+                              fontSize: (isSmallScreen ? 36 : 42) * scale,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                              letterSpacing: -1,
+                              height: 1.0,
+                              shadows: [
+                                BoxShadow(
+                                  color: prayerColor.withAlpha(100),
+                                  blurRadius: 20,
+                                ),
+                              ],
+                            ),
+                          ),
+                          SizedBox(height: 8 * scale),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.baseline,
+                            textBaseline: TextBaseline.alphabetic,
+                            children: [
+                              _buildTimerUnit(hours, 'H', scale),
+                              _buildTimerSeparator(scale),
+                              _buildTimerUnit(minutes, 'M', scale),
+                              _buildTimerSeparator(scale),
+                              _buildTimerUnit(seconds, 'S', scale, isSeconds: true),
+                            ],
+                          ),
+                          SizedBox(height: 16 * scale),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _buildTimePill('ADHAN', _formatTime(nextPrayer.adhanTime), scale, false, prayerColor),
+                              SizedBox(width: 8 * scale),
+                              _buildTimePill('IQAMA', _formatTime(nextPrayer.iqamaTime), scale, true, prayerColor),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ],
-              ),
+                );
+              },
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTimerUnit(int value, String label, double scale, {bool isSeconds = false}) {
+    return Column(
+      children: [
+        Text(
+          value.toString().padLeft(2, '0'),
+          style: TextStyle(
+            fontSize: (isSeconds ? 20 : 28) * scale,
+            fontWeight: FontWeight.w300,
+            color: Colors.white,
+            fontFamily: 'monospace',
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTimerSeparator(double scale) {
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: 4 * scale),
+      child: Text(
+        ':',
+        style: TextStyle(
+          fontSize: 20 * scale,
+          color: Colors.white.withAlpha(100),
+          fontWeight: FontWeight.w300,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTimePill(String label, String time, double scale, bool isAccented, Color color) {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 18 * scale, vertical: 10 * scale),
+      decoration: BoxDecoration(
+        color: isAccented ? color.withAlpha(15) : Colors.transparent,
+        borderRadius: BorderRadius.circular(16 * scale),
+      ),
+      child: Row(
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 9 * scale,
+              color: isAccented ? color : Colors.white.withAlpha(80),
+              fontWeight: FontWeight.w700,
+              letterSpacing: 1.5,
+            ),
+          ),
+          SizedBox(width: 8 * scale),
+          Text(
+            time,
+            style: TextStyle(
+              fontSize: 14 * scale,
+              fontWeight: FontWeight.w600,
+              color: isAccented ? Colors.white : Colors.white.withAlpha(180),
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
         ],
       ),
     );
@@ -109,124 +412,85 @@ class _HomeScreenState extends State<HomeScreen> {
     final screenWidth = MediaQuery.of(context).size.width;
     final isSmallScreen = screenWidth < 400;
 
-    return Padding(
-      padding: EdgeInsets.symmetric(horizontal: 2 * scale),
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 6 * scale, vertical: 6 * scale),
+      decoration: BoxDecoration(
+        color: Colors.white.withAlpha(5),
+        borderRadius: BorderRadius.circular(20 * scale),
+        border: Border.all(color: Colors.white.withAlpha(10)),
+      ),
       child: Row(
         children: [
-          // Left arrow
-          _buildNavButton(
-            context,
-            Icons.chevron_left,
-            () => userProvider.goToPreviousDay(),
-            scale,
-          ),
-          SizedBox(width: 4 * scale),
-          // Date display
+          _buildNavButton(context, Icons.chevron_left_rounded,
+              () => userProvider.goToPreviousDay(), scale),
           Expanded(
             child: GestureDetector(
               onTap: isToday ? null : () => userProvider.goToToday(),
               child: Container(
-                padding: EdgeInsets.symmetric(
-                  horizontal: (isSmallScreen ? 10 : 12) * scale,
-                  vertical: (isSmallScreen ? 6 : 8) * scale,
-                ),
-                decoration: BoxDecoration(
-                  color: isToday
-                      ? const Color(0xFF3B82F6).withAlpha(30)
-                      : Colors.white.withAlpha(10),
-                  borderRadius: BorderRadius.circular(10 * scale),
-                  border: Border.all(
-                    color: isToday
-                        ? const Color(0xFF3B82F6).withAlpha(60)
-                        : Colors.white.withAlpha(20),
-                  ),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                color: Colors.transparent,
+                alignment: Alignment.center,
+                child: Column(
                   children: [
                     Text(
                       isToday ? 'Today' : _formatDateShort(selectedDate),
                       style: TextStyle(
-                        fontSize: (isSmallScreen ? 13 : 14) * scale,
+                        fontSize: (isSmallScreen ? 14 : 15) * scale,
                         fontWeight: FontWeight.w600,
                         color: Colors.white.withAlpha(230),
                       ),
                     ),
-                    if (!isToday) ...[
-                      SizedBox(width: 6 * scale),
-                      Container(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: 4 * scale,
-                          vertical: 1 * scale,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withAlpha(15),
-                          borderRadius: BorderRadius.circular(4 * scale),
-                        ),
+                    if (!isToday)
+                      Padding(
+                        padding: EdgeInsets.only(top: 2 * scale),
                         child: Text(
                           'TAP FOR TODAY',
                           style: TextStyle(
-                            fontSize: 7 * scale,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white.withAlpha(120),
-                            letterSpacing: 0.3,
+                            fontSize: 8 * scale,
+                            fontWeight: FontWeight.w700,
+                            color: AppTheme.accentGold,
+                            letterSpacing: 1,
                           ),
                         ),
                       ),
-                    ],
                   ],
                 ),
               ),
             ),
           ),
-          SizedBox(width: 4 * scale),
-          // Right arrow
-          _buildNavButton(
-            context,
-            Icons.chevron_right,
-            () => userProvider.goToNextDay(),
-            scale,
-          ),
-          SizedBox(width: 8 * scale),
-          // Progress badge
-          Container(
-            padding: EdgeInsets.symmetric(
-              horizontal: (isSmallScreen ? 8 : 10) * scale,
-              vertical: (isSmallScreen ? 4 : 5) * scale,
-            ),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  const Color(0xFF10B981).withAlpha(completed == 5 ? 80 : 40),
-                  const Color(0xFF14B8A6).withAlpha(completed == 5 ? 60 : 25),
+          _buildNavButton(context, Icons.chevron_right_rounded,
+              () => userProvider.goToNextDay(), scale),
+          if (completed == 5) ...[
+            SizedBox(width: 8 * scale),
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: 10 * scale, vertical: 5 * scale),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    const Color(0xFF10B981).withAlpha(30),
+                    const Color(0xFF14B8A6).withAlpha(20),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(10 * scale),
+                border: Border.all(color: const Color(0xFF10B981).withAlpha(50)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.check_circle_rounded, size: 14 * scale,
+                      color: const Color(0xFF10B981)),
+                  SizedBox(width: 4 * scale),
+                  Text(
+                    '5/5',
+                    style: TextStyle(
+                      fontSize: 12 * scale,
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF10B981),
+                    ),
+                  ),
                 ],
               ),
-              borderRadius: BorderRadius.circular(10 * scale),
-              border: Border.all(
-                color: const Color(0xFF10B981).withAlpha(completed == 5 ? 100 : 50),
-              ),
             ),
-            child: Row(
-              children: [
-                if (completed == 5)
-                  Padding(
-                    padding: EdgeInsets.only(right: 4 * scale),
-                    child: Icon(Icons.check_circle,
-                                size: (isSmallScreen ? 12 : 14) * scale, color: const Color(0xFF10B981)),
-                  ),
-                Text(
-                  '$completed/5',
-                  style: TextStyle(
-                    fontSize: (isSmallScreen ? 11 : 12) * scale,
-                    fontWeight: FontWeight.w600,
-                    color: completed == 5
-                        ? const Color(0xFF10B981)
-                        : Colors.white.withAlpha(200),
-                  ),
-                ),
-              ],
-            ),
-          ),
+          ],
         ],
       ),
     );
@@ -234,21 +498,25 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildNavButton(BuildContext context, IconData icon, VoidCallback onTap, double scale) {
     final screenWidth = MediaQuery.of(context).size.width;
-    final isSmallScreen = screenWidth < 400;
-
+    final isCompact = screenWidth < 360;
+    final isMedium = screenWidth < 400;
+    final buttonSize = (isCompact ? 30 : isMedium ? 32 : 36) * scale;
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: (isSmallScreen ? 28 : 32) * scale,
-        height: (isSmallScreen ? 28 : 32) * scale,
+        width: buttonSize,
+        height: buttonSize,
         decoration: BoxDecoration(
-          color: Colors.white.withAlpha(10),
-          borderRadius: BorderRadius.circular(8 * scale),
-          border: Border.all(color: Colors.white.withAlpha(20)),
+          color: Colors.white.withAlpha(8),
+          borderRadius: BorderRadius.circular((isCompact ? 10 : 12) * scale),
+          border: Border.all(
+            color: Colors.white.withAlpha(15),
+            width: isCompact ? 0.8 : 1.0,
+          ),
         ),
         child: Icon(
           icon,
-          size: (isSmallScreen ? 18 : 20) * scale,
+          size: (isCompact ? 18 : isMedium ? 20 : 22) * scale,
           color: Colors.white.withAlpha(180),
         ),
       ),
@@ -261,248 +529,6 @@ class _HomeScreenState extends State<HomeScreen> {
     return '${months[date.month - 1]} ${date.day}';
   }
 
-  Widget _buildNextPrayerCard(BuildContext context, double scale) {
-    final userProvider = context.watch<UserProvider>();
-    final nextPrayer = userProvider.nextPrayer;
-    final user = userProvider.user;
-
-    // Check if location is set
-    if (user?.latitude == null || user?.longitude == null) {
-      return GlassContainer(
-        padding: EdgeInsets.all(20 * scale),
-        child: Center(
-          child: Column(
-            children: [
-              Icon(Icons.location_off, size: 28 * scale, color: Colors.white.withAlpha(100)),
-              SizedBox(height: 10 * scale),
-              Text(
-                'Set location in Settings',
-                style: TextStyle(color: Colors.white.withAlpha(150), fontSize: 13 * scale),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    // Loading state
-    if (nextPrayer == null) {
-      return GlassContainer(
-        padding: EdgeInsets.all(20 * scale),
-        child: Column(
-          children: [
-            Container(
-              padding: EdgeInsets.symmetric(horizontal: 12 * scale, vertical: 4 * scale),
-              decoration: BoxDecoration(
-                color: Colors.white.withAlpha(15),
-                borderRadius: BorderRadius.circular(12 * scale),
-              ),
-              child: Text(
-                'NEXT PRAYER',
-                style: TextStyle(
-                  fontSize: 10 * scale,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white.withAlpha(120),
-                  letterSpacing: 1,
-                ),
-              ),
-            ),
-            SizedBox(height: 12 * scale),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                SizedBox(
-                  width: 16 * scale,
-                  height: 16 * scale,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2 * scale,
-                    color: Colors.white.withAlpha(150),
-                  ),
-                ),
-                SizedBox(width: 10 * scale),
-                Text(
-                  'Loading...',
-                  style: TextStyle(fontSize: 14 * scale, color: Colors.white.withAlpha(150)),
-                ),
-              ],
-            ),
-          ],
-        ),
-      );
-    }
-
-    final timeUntil = nextPrayer.timeUntilAdhan;
-    final hours = timeUntil.inHours;
-    final minutes = timeUntil.inMinutes % 60;
-    final seconds = timeUntil.inSeconds % 60;
-
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isSmallScreen = screenWidth < 400;
-
-    return GlassContainer(
-      padding: EdgeInsets.all((isSmallScreen ? 14 : 18) * scale),
-      child: Column(
-        children: [
-          Container(
-            padding: EdgeInsets.symmetric(
-              horizontal: (isSmallScreen ? 10 : 12) * scale,
-              vertical: (isSmallScreen ? 3 : 4) * scale,
-            ),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  const Color(0xFF3B82F6).withAlpha(50),
-                  const Color(0xFF8B5CF6).withAlpha(35),
-                ],
-              ),
-              borderRadius: BorderRadius.circular(14 * scale),
-              border: Border.all(color: const Color(0xFF3B82F6).withAlpha(60)),
-            ),
-            child: Text(
-              'NEXT PRAYER',
-              style: TextStyle(
-                fontSize: (isSmallScreen ? 8 : 9) * scale,
-                fontWeight: FontWeight.w700,
-                color: Colors.white.withAlpha(200),
-                letterSpacing: 1,
-              ),
-            ),
-          ),
-          SizedBox(height: (isSmallScreen ? 8 : 10) * scale),
-          Text(
-            nextPrayer.name,
-            style: TextStyle(
-              fontSize: (isSmallScreen ? 26 : 30) * scale,
-              fontWeight: FontWeight.w600,
-              color: Colors.white,
-              letterSpacing: -0.5,
-            ),
-          ),
-          SizedBox(height: (isSmallScreen ? 10 : 14) * scale),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              _buildTimeUnit(context, hours, 'h', scale),
-              _buildTimeSeparator(context, scale),
-              _buildTimeUnit(context, minutes, 'm', scale),
-              _buildTimeSeparator(context, scale),
-              _buildTimeUnit(context, seconds, 's', scale),
-            ],
-          ),
-          SizedBox(height: (isSmallScreen ? 10 : 14) * scale),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              _buildTimeChip(context, 'Adhan', _formatTime(nextPrayer.adhanTime), scale),
-              SizedBox(width: (isSmallScreen ? 8 : 12) * scale),
-              _buildTimeChip(context, 'Iqama', _formatTime(nextPrayer.iqamaTime), scale),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTimeUnit(BuildContext context, int value, String label, double scale) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isSmallScreen = screenWidth < 400;
-
-    return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: (isSmallScreen ? 6 : 8) * scale,
-        vertical: (isSmallScreen ? 4 : 6) * scale,
-      ),
-      decoration: BoxDecoration(
-        color: Colors.white.withAlpha(10),
-        borderRadius: BorderRadius.circular(8 * scale),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          Text(
-            value.toString().padLeft(2, '0'),
-            style: TextStyle(
-              fontSize: (isSmallScreen ? 22 : 26) * scale,
-              fontWeight: FontWeight.w300,
-              color: Colors.white,
-              fontFeatures: const [FontFeature.tabularFigures()],
-            ),
-          ),
-          Padding(
-            padding: EdgeInsets.only(bottom: (isSmallScreen ? 3 : 4) * scale, left: 1 * scale),
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: (isSmallScreen ? 10 : 11) * scale,
-                fontWeight: FontWeight.w500,
-                color: Colors.white.withAlpha(120),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTimeSeparator(BuildContext context, double scale) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isSmallScreen = screenWidth < 400;
-
-    return Padding(
-      padding: EdgeInsets.symmetric(horizontal: (isSmallScreen ? 2 : 3) * scale),
-      child: Text(
-        ':',
-        style: TextStyle(
-          fontSize: (isSmallScreen ? 18 : 22) * scale,
-          fontWeight: FontWeight.w300,
-          color: Colors.white.withAlpha(80),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTimeChip(BuildContext context, String label, String time, double scale) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isSmallScreen = screenWidth < 400;
-
-    return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: (isSmallScreen ? 8 : 10) * scale,
-        vertical: (isSmallScreen ? 5 : 6) * scale,
-      ),
-      decoration: BoxDecoration(
-        color: Colors.white.withAlpha(12),
-        borderRadius: BorderRadius.circular(8 * scale),
-        border: Border.all(color: Colors.white.withAlpha(20)),
-      ),
-      child: Row(
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: (isSmallScreen ? 9 : 10) * scale,
-              color: Colors.white.withAlpha(120),
-            ),
-          ),
-          SizedBox(width: (isSmallScreen ? 4 : 6) * scale),
-          Text(
-            time,
-            style: TextStyle(
-              fontSize: (isSmallScreen ? 11 : 12) * scale,
-              fontWeight: FontWeight.w600,
-              color: Colors.white,
-              fontFeatures: const [FontFeature.tabularFigures()],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _formatTime(DateTime time) {
-    return '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
-  }
-
   Widget _buildPrayerTimesList(BuildContext context, double scale) {
     final userProvider = context.watch<UserProvider>();
     final prayerTimes = userProvider.todayPrayerTimes;
@@ -512,35 +538,24 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final prayers = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
 
-    // If no location set, show message
     if (user?.latitude == null || user?.longitude == null) {
       return GlassContainer(
         padding: EdgeInsets.all(24 * scale),
         child: Column(
           children: [
-            Icon(Icons.location_off, size: 48 * scale, color: Colors.white.withAlpha(100)),
+            Icon(Icons.location_off_rounded, size: 48 * scale,
+                color: Colors.white.withAlpha(100)),
             SizedBox(height: 16 * scale),
-            Text(
-              'Set your location in Settings',
-              style: TextStyle(
-                fontSize: 16 * scale,
-                color: Colors.white.withAlpha(180),
-              ),
-            ),
+            Text('Set your location in Settings',
+              style: TextStyle(fontSize: 16 * scale, color: Colors.white.withAlpha(180))),
             SizedBox(height: 8 * scale),
-            Text(
-              'to see prayer times',
-              style: TextStyle(
-                fontSize: 14 * scale,
-                color: Colors.white.withAlpha(120),
-              ),
-            ),
+            Text('to see prayer times',
+              style: TextStyle(fontSize: 14 * scale, color: Colors.white.withAlpha(120))),
           ],
         ),
       );
     }
 
-    // If prayer times not loaded yet, show loading cards
     if (prayerTimes == null) {
       return Column(
         children: prayers.map((prayerName) {
@@ -567,7 +582,6 @@ class _HomeScreenState extends State<HomeScreen> {
         final adhanTime = prayerTimes.parseTime(timeStr);
         final iqamaTime = adhanTime.add(Duration(minutes: iqamaOffset));
         final isCompleted = userProvider.isPrayerCompletedForSelectedDate(prayerName);
-        // Only show "NEXT" badge if viewing today
         final isNext = isToday && nextPrayer?.name == prayerName;
 
         return PrayerCard(
@@ -583,110 +597,167 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  String _formatTime(DateTime time) {
+    return '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+  }
+
   Widget _buildQadaCard(BuildContext context, double scale) {
     final userProvider = context.watch<UserProvider>();
     final qada = userProvider.qada;
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isSmallScreen = screenWidth < 400;
+    final isSmallScreen = MediaQuery.of(context).size.width < 400;
 
     if (qada == null || qada.totalMissedPrayers == 0) {
       return const SizedBox.shrink();
     }
 
-    final progress = qada.totalMissedPrayers > 0
-        ? qada.completedPrayers / qada.totalMissedPrayers
-        : 0.0;
+    final progress = qada.completedPrayers / qada.totalMissedPrayers;
 
     return GlassContainer(
-      padding: EdgeInsets.all((isSmallScreen ? 12 : 14) * scale),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      padding: EdgeInsets.all((isSmallScreen ? 12 : 16) * scale),
+      child: Row(
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Qada Progress',
-                style: TextStyle(
-                  fontSize: (isSmallScreen ? 13 : 14) * scale,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white.withAlpha(230),
+          SizedBox(
+            width: 44 * scale,
+            height: 44 * scale,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                CircularProgressIndicator(
+                  value: progress,
+                  strokeWidth: 3 * scale,
+                  backgroundColor: Colors.white.withAlpha(20),
+                  color: AppTheme.successGreen,
                 ),
-              ),
-              Text(
-                '${(progress * 100).toStringAsFixed(1)}%',
-                style: TextStyle(
-                  fontSize: (isSmallScreen ? 11 : 12) * scale,
-                  fontWeight: FontWeight.w600,
-                  color: const Color(0xFF10B981).withAlpha(230),
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: (isSmallScreen ? 8 : 10) * scale),
-          // Custom progress bar
-          Container(
-            height: (isSmallScreen ? 5 : 6) * scale,
-            decoration: BoxDecoration(
-              color: Colors.white.withAlpha(20),
-              borderRadius: BorderRadius.circular(3 * scale),
+                Icon(Icons.replay_rounded,
+                    size: 20 * scale, color: AppTheme.successGreen),
+              ],
             ),
-            child: FractionallySizedBox(
-              alignment: Alignment.centerLeft,
-              widthFactor: progress,
-              child: Container(
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF10B981), Color(0xFF14B8A6)],
+          ),
+          SizedBox(width: 16 * scale),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Missed Prayers',
+                  style: TextStyle(
+                    fontSize: (isSmallScreen ? 13 : 14) * scale,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white.withAlpha(230),
                   ),
-                  borderRadius: BorderRadius.circular(3 * scale),
                 ),
-              ),
+                SizedBox(height: 4 * scale),
+                Row(
+                  children: [
+                    Text(
+                      '${qada.completedPrayers} done',
+                      style: TextStyle(
+                        fontSize: (isSmallScreen ? 11 : 12) * scale,
+                        color: AppTheme.successGreen,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    Text(
+                      ' / ${qada.remainingPrayers} left',
+                      style: TextStyle(
+                        fontSize: (isSmallScreen ? 11 : 12) * scale,
+                        color: Colors.white.withAlpha(120),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
-          SizedBox(height: (isSmallScreen ? 8 : 10) * scale),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _buildQadaStat(context, 'Remaining', qada.remainingPrayers, Colors.white, scale),
-              _buildQadaStat(context, 'Completed', qada.completedPrayers, const Color(0xFF10B981), scale),
-            ],
+          Container(
+            padding: EdgeInsets.symmetric(horizontal: 12 * scale, vertical: 6 * scale),
+            decoration: BoxDecoration(
+              color: Colors.white.withAlpha(10),
+              borderRadius: BorderRadius.circular(8 * scale),
+            ),
+            child: Icon(Icons.chevron_right_rounded,
+                color: Colors.white.withAlpha(150), size: 18 * scale),
           ),
         ],
       ),
     );
   }
-
-  Widget _buildQadaStat(BuildContext context, String label, int value, Color color, double scale) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isSmallScreen = screenWidth < 400;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: (isSmallScreen ? 9 : 10) * scale,
-            color: Colors.white.withAlpha(120),
-          ),
-        ),
-        SizedBox(height: 1 * scale),
-        Text(
-          value.toString(),
-          style: TextStyle(
-            fontSize: (isSmallScreen ? 14 : 16) * scale,
-            fontWeight: FontWeight.w600,
-            color: color,
-            fontFeatures: const [FontFeature.tabularFigures()],
-          ),
-        ),
-      ],
-    );
-  }
 }
 
-/// Modern Prayer Card with checkbox functionality
+class _CountdownRingPainter extends CustomPainter {
+  final double progress;
+  final Color prayerColor;
+  final Color prayerAccent;
+  final double pulseValue;
+
+  _CountdownRingPainter({
+    required this.progress,
+    required this.prayerColor,
+    required this.prayerAccent,
+    required this.pulseValue,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final strokeWidth = 6.0;
+    final pulseStroke = strokeWidth + (pulseValue * 2);
+    const glowBlurSigma = 8.0;
+    final safeInset = (pulseStroke / 2) + glowBlurSigma + 2;
+    final rawRadius = (math.min(size.width, size.height) / 2) - safeInset;
+    final radius = rawRadius > 0 ? rawRadius : 0.0;
+
+    final bgPaint = Paint()
+      ..color = Colors.white.withAlpha(20)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.round;
+
+    canvas.drawCircle(center, radius, bgPaint);
+
+    final gradient = SweepGradient(
+      startAngle: -math.pi / 2,
+      endAngle: 3 * math.pi / 2,
+      tileMode: TileMode.clamp,
+      colors: [prayerColor, prayerAccent, prayerColor],
+      stops: const [0.0, 0.6, 1.0],
+    );
+
+    final progressPaint = Paint()
+      ..shader = gradient.createShader(Rect.fromCircle(center: center, radius: radius))
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.round;
+
+    final pulsePaint = Paint()
+       ..shader = gradient.createShader(Rect.fromCircle(center: center, radius: radius))
+       ..style = PaintingStyle.stroke
+       ..strokeWidth = pulseStroke
+       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, glowBlurSigma);
+    
+    final sweepAngle = 2 * math.pi * progress;
+    canvas.drawArc(Rect.fromCircle(center: center, radius: radius), -math.pi / 2, sweepAngle, false, pulsePaint);
+    canvas.drawArc(Rect.fromCircle(center: center, radius: radius), -math.pi / 2, sweepAngle, false, progressPaint);
+
+    if (progress > 0.01) {
+      final tipAngle = -math.pi / 2 + sweepAngle;
+      final tipCenter = Offset(
+        center.dx + radius * math.cos(tipAngle),
+        center.dy + radius * math.sin(tipAngle),
+      );
+      canvas.drawCircle(tipCenter, 4 + pulseValue * 2, Paint()..color = Colors.white);
+      canvas.drawCircle(tipCenter, 8 + pulseValue * 4, Paint()..color = prayerAccent.withAlpha(100));
+    }
+  }
+
+  @override
+  bool shouldRepaint(_CountdownRingPainter oldDelegate) =>
+      oldDelegate.progress != progress ||
+      oldDelegate.prayerColor != prayerColor ||
+      oldDelegate.prayerAccent != prayerAccent ||
+      oldDelegate.pulseValue != pulseValue;
+}
+
 class PrayerCard extends StatelessWidget {
   final String name;
   final String adhanTime;
@@ -707,209 +778,129 @@ class PrayerCard extends StatelessWidget {
     required this.scale,
   });
 
-  IconData _getPrayerIcon() {
-    switch (name) {
-      case 'Fajr':
-        return Icons.wb_twilight;
-      case 'Dhuhr':
-        return Icons.wb_sunny;
-      case 'Asr':
-        return Icons.sunny_snowing;
-      case 'Maghrib':
-        return Icons.nights_stay_outlined;
-      case 'Isha':
-        return Icons.nightlight_round;
-      default:
-        return Icons.access_time;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isSmallScreen = screenWidth < 400;
+    final prayerColor = AppTheme.getPrayerColor(name);
+    final prayerAccent = AppTheme.getPrayerAccent(name);
+    final prayerIcon = AppTheme.getPrayerIcon(name);
 
-    return Container(
-      margin: EdgeInsets.only(bottom: (isSmallScreen ? 8 : 10) * scale),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: isNext
-              ? [
-                  const Color(0xFF3B82F6).withAlpha(40),
-                  const Color(0xFF8B5CF6).withAlpha(25),
-                ]
-              : [
-                  Colors.white.withAlpha(12),
-                  Colors.white.withAlpha(6),
-                ],
-        ),
-        borderRadius: BorderRadius.circular((isSmallScreen ? 12 : 14) * scale),
-        border: Border.all(
-          color: isNext
-              ? const Color(0xFF3B82F6).withAlpha(60)
-              : Colors.white.withAlpha(15),
-          width: (isNext ? 1.5 : 1) * scale,
-        ),
-        boxShadow: isNext
-            ? [
-                BoxShadow(
-                  color: const Color(0xFF3B82F6).withAlpha(30),
-                  blurRadius: 16 * scale,
-                  offset: Offset(0, 3 * scale),
-                ),
-              ]
-            : null,
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular((isSmallScreen ? 12 : 14) * scale),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: onToggle,
-              borderRadius: BorderRadius.circular((isSmallScreen ? 12 : 14) * scale),
-              child: Padding(
-                padding: EdgeInsets.symmetric(
-                  horizontal: (isSmallScreen ? 10 : 12) * scale,
-                  vertical: (isSmallScreen ? 10 : 12) * scale,
-                ),
-                child: Row(
-                  children: [
-                    // Checkbox
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      width: (isSmallScreen ? 20 : 22) * scale,
-                      height: (isSmallScreen ? 20 : 22) * scale,
-                      decoration: BoxDecoration(
-                        gradient: isCompleted
-                            ? const LinearGradient(
-                                colors: [Color(0xFF10B981), Color(0xFF14B8A6)],
-                              )
-                            : null,
-                        color: isCompleted ? null : Colors.transparent,
-                        borderRadius: BorderRadius.circular((isSmallScreen ? 5 : 6) * scale),
-                        border: Border.all(
-                          color: isCompleted
-                              ? Colors.transparent
-                              : Colors.white.withAlpha(60),
-                          width: (isSmallScreen ? 1.5 : 2) * scale,
-                        ),
-                      ),
-                      child: isCompleted
-                          ? Icon(Icons.check, size: (isSmallScreen ? 12 : 14) * scale, color: Colors.white)
-                          : null,
+    return GestureDetector(
+      onTap: onToggle,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOutBack,
+        margin: EdgeInsets.only(bottom: (isNext ? 12 : 8) * scale),
+        transform: isNext ? (Matrix4.identity()..scale(1.02)) : Matrix4.identity(),
+        child: GlassContainer(
+          padding: EdgeInsets.zero,
+          variant: isNext ? GlassVariant.elevated : GlassVariant.standard,
+          accentColor: isNext ? prayerColor : null,
+          child: Container(
+            height: (isNext ? 80 : 64) * scale,
+            decoration: BoxDecoration(
+               color: isNext ? prayerColor.withAlpha(15) : Colors.transparent,
+               borderRadius: BorderRadius.circular(24 * scale),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: (isNext ? 70 : 60) * scale,
+                  height: double.infinity,
+                  decoration: BoxDecoration(
+                    color: isNext ? prayerColor.withAlpha(30) : Colors.white.withAlpha(5),
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(24 * scale),
+                      bottomLeft: Radius.circular(24 * scale),
                     ),
-                    SizedBox(width: (isSmallScreen ? 8 : 10) * scale),
-                    // Prayer icon
-                    Container(
-                      width: (isSmallScreen ? 32 : 36) * scale,
-                      height: (isSmallScreen ? 32 : 36) * scale,
-                      decoration: BoxDecoration(
-                        color: isNext
-                            ? const Color(0xFF3B82F6).withAlpha(30)
-                            : Colors.white.withAlpha(10),
-                        borderRadius: BorderRadius.circular((isSmallScreen ? 8 : 9) * scale),
-                      ),
-                      child: Icon(
-                        _getPrayerIcon(),
-                        size: (isSmallScreen ? 16 : 18) * scale,
-                        color: isNext
-                            ? const Color(0xFF60A5FA)
-                            : Colors.white.withAlpha(180),
-                      ),
+                  ),
+                  child: Center(
+                    child: Icon(
+                      prayerIcon,
+                      color: isNext ? prayerAccent : Colors.white.withAlpha(150),
+                      size: (isNext ? 28 : 22) * scale,
                     ),
-                    SizedBox(width: (isSmallScreen ? 8 : 10) * scale),
-                    // Prayer name and times
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Text(
-                                name,
+                  ),
+                ),
+                Expanded(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16 * scale),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              name,
+                              style: TextStyle(
+                                fontSize: (isNext ? 18 : 16) * scale,
+                                fontWeight: isNext ? FontWeight.w700 : FontWeight.w600,
+                                color: isCompleted ? Colors.white.withAlpha(120) : Colors.white,
+                                decoration: isCompleted ? TextDecoration.lineThrough : null,
+                                decorationColor: Colors.white.withAlpha(50),
+                              ),
+                            ),
+                            if (isNext)
+                            Padding(
+                              padding: EdgeInsets.only(top: 4 * scale),
+                              child: Text(
+                                'Iqama $iqamaTime',
                                 style: TextStyle(
-                                  fontSize: (isSmallScreen ? 13 : 14) * scale,
-                                  fontWeight: isNext ? FontWeight.w600 : FontWeight.w500,
-                                  color: isCompleted
-                                      ? Colors.white.withAlpha(120)
-                                      : Colors.white,
-                                  decoration: isCompleted
-                                      ? TextDecoration.lineThrough
-                                      : null,
-                                  decorationColor: Colors.white.withAlpha(60),
+                                  fontSize: 11 * scale,
+                                  color: Colors.white.withAlpha(100),
                                 ),
                               ),
-                              if (isNext) ...[
-                                SizedBox(width: (isSmallScreen ? 5 : 6) * scale),
-                                Container(
-                                  padding: EdgeInsets.symmetric(
-                                      horizontal: (isSmallScreen ? 5 : 6) * scale, vertical: 1 * scale),
-                                  decoration: BoxDecoration(
-                                    gradient: const LinearGradient(
-                                      colors: [Color(0xFF3B82F6), Color(0xFF8B5CF6)],
-                                    ),
-                                    borderRadius: BorderRadius.circular(4 * scale),
-                                  ),
-                                  child: Text(
-                                    'NEXT',
-                                    style: TextStyle(
-                                      fontSize: (isSmallScreen ? 7 : 8) * scale,
-                                      fontWeight: FontWeight.w700,
-                                      color: Colors.white,
-                                      letterSpacing: 0.3,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                          SizedBox(height: (isSmallScreen ? 2 : 3) * scale),
-                          Text(
-                            'Iqama: $iqamaTime',
-                            style: TextStyle(
-                              fontSize: (isSmallScreen ? 10 : 11) * scale,
-                              color: Colors.white.withAlpha(100),
                             ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    // Adhan time
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text(
-                          adhanTime,
-                          style: TextStyle(
-                            fontSize: (isSmallScreen ? 14 : 16) * scale,
-                            fontWeight: FontWeight.w600,
-                            color: isCompleted
-                                ? Colors.white.withAlpha(120)
-                                : Colors.white,
-                            fontFeatures: const [FontFeature.tabularFigures()],
-                          ),
+                          ],
                         ),
-                        Text(
-                          'Adhan',
-                          style: TextStyle(
-                            fontSize: (isSmallScreen ? 9 : 10) * scale,
-                            color: Colors.white.withAlpha(80),
-                          ),
+                        Row(
+                          children: [
+                            Text(
+                                adhanTime,
+                                style: TextStyle(
+                                  fontSize: (isNext ? 22 : 18) * scale,
+                                  fontWeight: FontWeight.w600,
+                                  color: isCompleted ? Colors.white.withAlpha(100) : Colors.white,
+                                  decoration: isCompleted ? TextDecoration.lineThrough : null,
+                                  decorationColor: Colors.white.withAlpha(50),
+                                ),
+                              ),
+                              SizedBox(width: 12 * scale),
+                              _buildCheckbox(isCompleted),
+                          ],
                         ),
                       ],
                     ),
-                  ],
+                  ),
                 ),
-              ),
+              ],
             ),
           ),
         ),
       ),
     );
   }
-}
 
+  Widget _buildCheckbox(bool isChecked) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      width: 24 * scale,
+      height: 24 * scale,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: isChecked ? AppTheme.successGreen : Colors.transparent,
+        border: Border.all(
+          color: isChecked ? AppTheme.successGreen : Colors.white.withAlpha(40),
+          width: 2,
+        ),
+        boxShadow: isChecked ? [
+          BoxShadow(color: AppTheme.successGreen.withAlpha(100), blurRadius: 10),
+        ] : [],
+      ),
+      child: isChecked
+          ? Icon(Icons.check, color: Colors.white, size: 16 * scale)
+          : null,
+    );
+  }
+}

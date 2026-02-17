@@ -44,6 +44,12 @@ class UserModel extends HiveObject {
   @HiveField(12, defaultValue: 1.0)
   double uiScale; // UI scale factor (0.7 - 1.3)
 
+  @HiveField(13)
+  Map<String, bool> reminders; // Prayer name -> enabled
+
+  @HiveField(14, defaultValue: 15)
+  int reminderMinutesBefore;
+
   UserModel({
     String? userId,
     this.name,
@@ -58,6 +64,8 @@ class UserModel extends HiveObject {
     this.calculationMethod = 2, // Muslim World League
     Map<String, List<String>>? completedPrayersDaily,
     this.uiScale = 1.0,
+    Map<String, bool>? reminders,
+    this.reminderMinutesBefore = 15,
   })  : userId = userId ?? const Uuid().v4(),
         iqamaOffsets = iqamaOffsets ??
             {
@@ -67,7 +75,15 @@ class UserModel extends HiveObject {
               'Maghrib': 5,
               'Isha': 10,
             },
-        completedPrayersDaily = completedPrayersDaily ?? {};
+        completedPrayersDaily = completedPrayersDaily ?? {},
+        reminders = reminders ??
+            {
+              'Fajr': true,
+              'Dhuhr': true,
+              'Asr': true,
+              'Maghrib': true,
+              'Isha': true,
+            };
 
   /// Get today's date key
   static String get todayKey {

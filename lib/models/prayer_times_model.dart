@@ -69,18 +69,26 @@ class PrayerTimesModel extends HiveObject {
   NextPrayerInfo? getNextPrayer({Map<String, int>? iqamaOffsets}) {
     final now = DateTime.now();
     final prayers = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
+    DateTime? previousTime;
 
     for (final prayerName in prayers) {
       final adhanTime = parseTime(getTimeByName(prayerName)!);
       if (adhanTime.isAfter(now)) {
         final offset = iqamaOffsets?[prayerName] ?? 0;
         final iqamaTime = adhanTime.add(Duration(minutes: offset));
+        
+        // If this is Fajr (first prayer of day), previousTime is null.
+        // We could theoretically check yesterday's Isha, but for simplicity
+        // let's rely on the caller or just use null to indicate "new day".
+        
         return NextPrayerInfo(
           name: prayerName,
           adhanTime: adhanTime,
           iqamaTime: iqamaTime,
+          previousAdhanTime: previousTime,
         );
       }
+      previousTime = adhanTime;
     }
     return null; // All prayers passed for today
   }
@@ -111,11 +119,13 @@ class NextPrayerInfo {
   final String name;
   final DateTime adhanTime;
   final DateTime iqamaTime;
+  final DateTime? previousAdhanTime;
 
   NextPrayerInfo({
     required this.name,
     required this.adhanTime,
     required this.iqamaTime,
+    this.previousAdhanTime,
   });
 
   Duration get timeUntilAdhan => adhanTime.difference(DateTime.now());

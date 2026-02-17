@@ -1,3 +1,5 @@
+// ignore_for_file: constant_identifier_names
+
 /// Mapping of Surah number to starting page in Mushaf (Madani)
 const Map<int, int> SURAH_START_PAGES = {
   1: 1, // Al-Fatihah
@@ -118,4 +120,3 @@ const Map<int, int> SURAH_START_PAGES = {
 
 const int TOTAL_PAGES = 604;
 const int TOTAL_SURAHS = 114;
-

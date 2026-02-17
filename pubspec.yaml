@@ -43,6 +43,9 @@ dependencies:
   http: ^1.2.0
   flutter_qiblah: ^3.1.0+1
   permission_handler: ^11.3.0
+  google_fonts: ^6.3.2
+  hijri_calendar: ^1.0.7+7
+  uuid: ^4.5.1
 
 dev_dependencies:
   flutter_test:

@@ -17,8 +17,13 @@ class UserProvider extends ChangeNotifier {
   QadaModel? _qada;
   RamadanModel? _ramadan;
   PrayerTimesModel? _todayPrayerTimes;
+  PrayerTimesModel? _tomorrowPrayerTimes;
   NextPrayerInfo? _nextPrayer;
   DateTime _selectedDate = DateTime.now();
+  int? _requestedTabIndex;
+  DateTime _clock = DateTime.now();
+
+  // Reminder state - now using _user instead of local fields
 
   Timer? _heartbeatTimer;
   final PrayerService _prayerService = PrayerService();
@@ -29,6 +34,8 @@ class UserProvider extends ChangeNotifier {
   PrayerTimesModel? get todayPrayerTimes => _todayPrayerTimes;
   NextPrayerInfo? get nextPrayer => _nextPrayer;
   DateTime get selectedDate => _selectedDate;
+  int? get requestedTabIndex => _requestedTabIndex;
+  DateTime get clock => _clock;
 
   /// Check if selected date is today
   bool get isSelectedDateToday {
@@ -40,14 +47,42 @@ class UserProvider extends ChangeNotifier {
 
   /// Initialize provider and load data
   Future<void> initialize() async {
+    debugPrint('UserProvider.initialize() started');
     await _loadUser();
+    debugPrint('User loaded: ${_user?.city}');
     await _loadQada();
+    debugPrint('Qada loaded');
     await _loadRamadan();
+    debugPrint('Ramadan loaded');
 
     if (_user != null && _user!.latitude != null && _user!.longitude != null) {
-      await loadTodayPrayerTimes();
-      _startHeartbeat();
+      debugPrint('User has location: ${_user!.latitude}, ${_user!.longitude}');
+      try {
+        debugPrint('Calling loadTodayPrayerTimes...');
+        await loadTodayPrayerTimes();
+        debugPrint('Prayer times loaded');
+        _startHeartbeat();
+      } catch (e) {
+        debugPrint('Error loading prayer times: $e');
+      }
+    } else if (_user != null) {
+      debugPrint('User has no location, setting default...');
+      // Set default location for testing (Mecca, Saudi Arabia)
+      _user!.latitude = 21.4225;
+      _user!.longitude = 39.8262;
+      _user!.city = 'Mecca';
+      _user!.country = 'Saudi Arabia';
+      await saveUser();
+      try {
+        debugPrint('Calling loadTodayPrayerTimes with default location...');
+        await loadTodayPrayerTimes();
+        debugPrint('Prayer times loaded with default location');
+        _startHeartbeat();
+      } catch (e) {
+        debugPrint('Error loading prayer times with default location: $e');
+      }
     }
+    debugPrint('UserProvider.initialize() completed');
   }
 
   /// Load user from Hive
@@ -146,7 +181,7 @@ class UserProvider extends ChangeNotifier {
         longitude: position.longitude,
       );
     } catch (e) {
-      print('Error getting location: $e');
+      debugPrint('Error getting location: $e');
     }
   }
 
@@ -154,41 +189,100 @@ class UserProvider extends ChangeNotifier {
   Future<void> loadTodayPrayerTimes() async {
     if (_user?.latitude == null || _user?.longitude == null) return;
 
-    _todayPrayerTimes = await _prayerService.getTodayPrayerTimes(
-      latitude: _user!.latitude!,
-      longitude: _user!.longitude!,
-      method: _user!.calculationMethod,
-    );
+    try {
+      _todayPrayerTimes = await _prayerService.getTodayPrayerTimes(
+        latitude: _user!.latitude!,
+        longitude: _user!.longitude!,
+        method: _user!.calculationMethod,
+      ).timeout(
+        const Duration(seconds: 10),
+        onTimeout: () {
+          debugPrint('Prayer times request timed out');
+          return null;
+        },
+      );
 
-    _updateNextPrayer();
-    notifyListeners();
+      _updateNextPrayer();
+      notifyListeners();
+      _loadNextDayPrayerTimes();
+    } catch (e) {
+      debugPrint('Error loading today prayer times: $e');
+      notifyListeners();
+    }
   }
 
-  /// Start heartbeat timer (runs every second)
+  /// Load tomorrow's prayer times
+  Future<void> _loadNextDayPrayerTimes() async {
+    if (_user?.latitude == null || _user?.longitude == null) return;
+
+    try {
+      final tomorrow = DateTime.now().add(const Duration(days: 1));
+      _tomorrowPrayerTimes = await _prayerService.getPrayerTimes(
+        latitude: _user!.latitude!,
+        longitude: _user!.longitude!,
+        date: tomorrow,
+        method: _user!.calculationMethod,
+      );
+      _updateNextPrayer();
+    } catch (e) {
+      debugPrint('Error loading tomorrow prayer times: $e');
+    }
+  }
+
+  /// Start heartbeat timer - optimized to only notify when needed
   void _startHeartbeat() {
     _heartbeatTimer?.cancel();
+    // Use a longer interval and only update clock without notifying listeners
     _heartbeatTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      _updateNextPrayer();
+      final now = DateTime.now();
+      _clock = now;
+      
+      // Only call notifyListeners when the next prayer changes
+      // This is much more efficient than notifying every second
+      final newNextPrayer = _calculateNextPrayer(now);
+      if (_hasNextPrayerChanged(newNextPrayer)) {
+        _nextPrayer = newNextPrayer;
+        notifyListeners();
+      }
     });
+  }
+
+  /// Calculate next prayer without storing
+  NextPrayerInfo? _calculateNextPrayer(DateTime now) {
+    if (_todayPrayerTimes == null) return null;
+    
+    final newNext = _todayPrayerTimes!.getNextPrayer(
+      iqamaOffsets: _user?.iqamaOffsets,
+    );
+    
+    if (newNext == null && _tomorrowPrayerTimes != null) {
+      final tomorrowFajr = _tomorrowPrayerTimes!.parseTime(_tomorrowPrayerTimes!.fajr);
+      final offset = _user?.iqamaOffsets['Fajr'] ?? 0;
+      final iqamaTime = tomorrowFajr.add(Duration(minutes: offset));
+      final todayIsha = _todayPrayerTimes!.parseTime(_todayPrayerTimes!.isha);
+      
+      return NextPrayerInfo(
+        name: 'Fajr',
+        adhanTime: tomorrowFajr,
+        iqamaTime: iqamaTime,
+        previousAdhanTime: todayIsha,
+      );
+    }
+    return newNext;
+  }
+
+  /// Check if next prayer has changed
+  bool _hasNextPrayerChanged(NextPrayerInfo? newNext) {
+    if (newNext?.name != _nextPrayer?.name) return true;
+    if (newNext?.iqamaTime != _nextPrayer?.iqamaTime) return true;
+    if (newNext?.adhanTime != _nextPrayer?.adhanTime) return true;
+    return false;
   }
 
   /// Update next prayer info
   void _updateNextPrayer() {
-    if (_todayPrayerTimes == null) return;
-
-    final newNextPrayer = _todayPrayerTimes!.getNextPrayer(
-      iqamaOffsets: _user?.iqamaOffsets,
-    );
-
-    // Check if anything changed (name, adhan time, or iqama time)
-    final hasChanged = newNextPrayer?.name != _nextPrayer?.name ||
-        newNextPrayer?.iqamaTime != _nextPrayer?.iqamaTime ||
-        newNextPrayer?.adhanTime != _nextPrayer?.adhanTime;
-
-    if (hasChanged) {
-      _nextPrayer = newNextPrayer;
-      notifyListeners();
-    }
+    final newNextPrayer = _calculateNextPrayer(_clock);
+    _nextPrayer = newNextPrayer;
   }
 
   /// Load Qada data
@@ -291,6 +385,17 @@ class UserProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void requestTab(int index) {
+    _requestedTabIndex = index;
+    notifyListeners();
+  }
+
+  int? consumeRequestedTab() {
+    final value = _requestedTabIndex;
+    _requestedTabIndex = null;
+    return value;
+  }
+
   /// Toggle prayer for selected date
   Future<void> togglePrayerForSelectedDate(String prayerName) async {
     if (_user == null) return;
@@ -324,10 +429,36 @@ class UserProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ─── Reminder Methods ───
+
+  bool get areAllRemindersEnabled => _user?.reminders.values.every((v) => v) ?? true;
+  int get reminderMinutesBefore => _user?.reminderMinutesBefore ?? 15;
+
+  bool isReminderEnabled(String prayer) => _user?.reminders[prayer] ?? true;
+
+  Future<void> toggleReminder(String prayer, bool value) async {
+    if (_user == null) return;
+    _user!.reminders[prayer] = value;
+    await saveUser();
+  }
+
+  Future<void> toggleAllReminders(bool value) async {
+    if (_user == null) return;
+    for (final key in _user!.reminders.keys) {
+      _user!.reminders[key] = value;
+    }
+    await saveUser();
+  }
+
+  Future<void> setReminderMinutesBefore(int minutes) async {
+    if (_user == null) return;
+    _user!.reminderMinutesBefore = minutes;
+    await saveUser();
+  }
+
   @override
   void dispose() {
     _heartbeatTimer?.cancel();
     super.dispose();
   }
 }
-
